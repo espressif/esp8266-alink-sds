@@ -1,0 +1,24 @@
+.config
+*.o
+*.pyc
+
+# emacs
+.dir-locals.el
+
+# emacs temp file suffixes
+*~
+.#*
+\#*#
+
+
+# sublime
+.tags
+.tags_sorted_by_file
+*.sublime-project
+*.sublime-workspace
+
+# Compile the generated temporary files
+.output/*
+adaptation/.output
+application/.output
+components/.output
