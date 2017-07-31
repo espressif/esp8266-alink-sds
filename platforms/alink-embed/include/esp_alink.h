@@ -95,6 +95,12 @@ typedef int32_t alink_err_t;
 #define CONFIG_ALINK_POST_DATA_STACK  (3072 / 4)
 #endif
 
+#ifndef CONFIG_ALINK_MODULE_NAME
+#define CONFIG_ALINK_MODULE_NAME      "ESP-WROOM-02"
+#endif
+
+#define ALINK_MODULE_NAME             CONFIG_ALINK_MODULE_NAME
+
 #define WIFI_WAIT_TIME                (CONFIG_WIFI_WAIT_TIME * 1000)
 #define ALINK_DATA_LEN                CONFIG_ALINK_DATA_LEN
 #define DEFAULU_TASK_PRIOTY           CONFIG_ALINK_TASK_PRIOTY
@@ -114,12 +120,13 @@ typedef enum {
     ALINK_EVENT_GET_DEVICE_DATA,    /*!< Alink cloud requests data from the device */
     ALINK_EVENT_SET_DEVICE_DATA,    /*!< Alink cloud to send data to the device */
     ALINK_EVENT_POST_CLOUD_DATA,    /*!< The device sends data to alink cloud  */
-    ALINK_EVENT_STA_GOT_IP,         /*!< ESP32 station got IP from connected AP */
-    ALINK_EVENT_STA_DISCONNECTED,   /*!< ESP32 station disconnected from AP */
+    ALINK_EVENT_WIFI_CONNECTED,     /*!< ESP32 station got IP from connected AP */
+    ALINK_EVENT_WIFI_DISCONNECTED,  /*!< ESP32 station disconnected from AP */
     ALINK_EVENT_CONFIG_NETWORK,     /*!< The equipment enters the distribution mode */
     ALINK_EVENT_UPDATE_ROUTER,      /*!< Request to configure the router */
     ALINK_EVENT_FACTORY_RESET,      /*!< Request to restore factory settings */
     ALINK_EVENT_ACTIVATE_DEVICE,    /*!< Request activation device */
+    ALINK_EVENT_HIGH_FREQUENCY_TEST,/*!< Enter the high frequency data transceiver test */
 } alink_event_t;
 
 typedef struct alink_product {

@@ -23,6 +23,9 @@
  */
 
 #include "c_types.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "esp_libc.h"
 
@@ -39,13 +42,26 @@ typedef struct alink_info {
 } alink_info_t;
 
 typedef struct alink_info_manager {
-    uint8_t flag;
     uint8_t num;
     uint16_t use_length;
-    alink_info_t alink_info[5];
+    alink_info_t alink_info[INFO_STORE_KEY_NUM];
 } alink_info_manager_t;
 
 static alink_info_manager_t g_info_manager;
+
+static xSemaphoreHandle info_store_lock = NULL;
+#define INFO_MUTEX_INIT()       info_store_lock = xSemaphoreCreateMutex()
+#define INFO_MUTEX_LOCK()       xSemaphoreTake(info_store_lock, portMAX_DELAY)
+#define INFO_MUTEX_UNLOCK()     xSemaphoreGive(info_store_lock)
+#define INFO_MUTEX_DEINIT()     vSemaphoreDelete(info_store_lock)
+
+#define ALINK_ERROR_GOTO(err, lable, format, ...) do{\
+        if(err) {\
+            ALINK_LOGE(format, ##__VA_ARGS__); \
+            goto lable;\
+        }\
+    }while(0)
+
 static int get_alink_info_index(const char *key)
 {
     int i = 0;
@@ -61,52 +77,62 @@ static int get_alink_info_index(const char *key)
 
 alink_err_t esp_info_init()
 {
-    int res = 0;
-    uint32_t  value = 0;
-    res = spi_flash_read(INFO_STORE_MANAGER_ADDR, (uint32_t *)&g_info_manager, sizeof(alink_info_manager_t));
+    int ret = 0;
 
-    if (res != SPI_FLASH_RESULT_OK) {
-        os_printf("read flash data error\n");
-        return ALINK_ERR;
-    }
+    INFO_MUTEX_INIT();
 
-    if (g_info_manager.num == 0xff || g_info_manager.num == 0x0) {
+    ret = system_param_load(INFO_STORE_MANAGER_ADDR / 4096, 0, &g_info_manager, sizeof(alink_info_manager_t));
+    ALINK_ERROR_CHECK(ret == ALINK_FALSE, ALINK_ERR, "read flash data error");
+
+    if (g_info_manager.num > INFO_STORE_KEY_NUM || g_info_manager.num == 0x0) {
         spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096);
         g_info_manager.num = 0;
         g_info_manager.use_length = sizeof(alink_info_manager_t);
-    } else {
-        int i = 0;
-
-        for (i = 0; i < g_info_manager.num; ++i) {
-            ALINK_LOGD("index: %d   key: %s", i, g_info_manager.alink_info[i].key);
-        }
     }
 
     ALINK_LOGD("alink info addr: 0x%x, num: %d", INFO_STORE_MANAGER_ADDR, g_info_manager.num);
+
     return ALINK_OK;
 }
 
 int esp_info_erase(const char *key)
 {
     ALINK_PARAM_CHECK(!key);
+    INFO_MUTEX_LOCK();
+
+    uint8_t *data_tmp = NULL;
+    alink_err_t ret = ALINK_FALSE;
+    int info_index = 0;
 
     if (!strcmp(key, ALINK_SPACE_NAME)) {
         spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096);
-        return ALINK_OK;
+        spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096 + 1);
+        spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096 + 2);
+        ret = ALINK_TRUE;
+        goto EXIT;
     }
 
-    int info_index = get_alink_info_index(key);
-    ALINK_ERROR_CHECK(info_index < 0, ALINK_ERR, "get_alink_info_index");
+    info_index = get_alink_info_index(key);
+    ALINK_ERROR_GOTO(info_index < 0, EXIT, "get_alink_info_index");
 
-    uint8_t *data_tmp = malloc(g_info_manager.use_length);
-    int ret = spi_flash_read(INFO_STORE_MANAGER_ADDR, (uint32_t *)data_tmp, g_info_manager.use_length);
+    data_tmp = malloc(g_info_manager.use_length);
+    ret = system_param_load(INFO_STORE_MANAGER_ADDR / 4096, 0, data_tmp, g_info_manager.use_length);
+    ALINK_ERROR_GOTO(ret == ALINK_FALSE, EXIT, "system_param_load");
+
     memset(data_tmp + g_info_manager.alink_info[info_index].offset, 0xff,
            g_info_manager.alink_info[info_index].length);
-    spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096);
-    spi_flash_write(INFO_STORE_MANAGER_ADDR, (uint32_t *)data_tmp, g_info_manager.use_length);
-    free(data_tmp);
 
-    return ALINK_OK;
+    ret = system_param_save_with_protect(INFO_STORE_MANAGER_ADDR / 4096, data_tmp, g_info_manager.use_length);
+    ALINK_ERROR_GOTO(ret == ALINK_FALSE, EXIT, "system_param_save_with_protect");
+
+EXIT:
+    INFO_MUTEX_UNLOCK();
+
+    if (data_tmp) {
+        free(data_tmp);
+    }
+
+    return ret ? ALINK_OK : ALINK_ERR;
 }
 
 ssize_t esp_info_save(const char *key, const void *value, size_t length)
@@ -115,39 +141,45 @@ ssize_t esp_info_save(const char *key, const void *value, size_t length)
     ALINK_PARAM_CHECK(!value);
     ALINK_PARAM_CHECK(length <= 0);
 
-    if (length & 0x03 != 0) {
-        length += (4 - length & 0x3);
-    }
+    INFO_MUTEX_LOCK();
 
     int i = 0;
     int ret = 0;
+    uint8_t *data_tmp = NULL;
     int info_index = get_alink_info_index(key);
 
+
     if (info_index < 0) {
+        ALINK_ERROR_CHECK(g_info_manager.num == INFO_STORE_KEY_NUM, ALINK_ERR,
+                          "Has reached the upper limit of the number of stores");
         alink_info_t *alink_info = &g_info_manager.alink_info[g_info_manager.num];
         strncpy(alink_info->key, key, INFO_STORE_KEY_LEN);
         alink_info->length = length;
         alink_info->offset = g_info_manager.use_length;
-        g_info_manager.use_length += length;
+        /*!< Four bytes aligned */
+        g_info_manager.use_length += alink_info->length + (4 - (length & 0x3));
         info_index = g_info_manager.num;
         g_info_manager.num++;
     }
 
-    uint8_t *data_tmp = malloc(g_info_manager.use_length);
-    ret = spi_flash_read(INFO_STORE_MANAGER_ADDR, (uint32_t *)data_tmp, g_info_manager.use_length);
+    data_tmp = malloc(g_info_manager.use_length);
+    ret = system_param_load(INFO_STORE_MANAGER_ADDR / 4096, 0, data_tmp, g_info_manager.use_length);
+    ALINK_ERROR_GOTO(ret == ALINK_FALSE, EXIT, "system_param_load");
 
     memcpy(data_tmp, &g_info_manager, sizeof(alink_info_manager_t));
     memcpy(data_tmp + g_info_manager.alink_info[info_index].offset, value,
            g_info_manager.alink_info[info_index].length);
-    spi_flash_erase_sector(INFO_STORE_MANAGER_ADDR / 4096);
-    ret = spi_flash_write(INFO_STORE_MANAGER_ADDR, (uint32_t *)data_tmp, g_info_manager.use_length);
-    free(data_tmp);
+    ret = system_param_save_with_protect(INFO_STORE_MANAGER_ADDR / 4096, data_tmp, g_info_manager.use_length);
+    ALINK_ERROR_GOTO(ret == ALINK_FALSE, EXIT, "system_param_save_with_protect");
 
-    if (ret != SPI_FLASH_RESULT_OK) {
-        return ALINK_ERR;
+EXIT:
+    INFO_MUTEX_UNLOCK();
+
+    if (data_tmp) {
+        free(data_tmp);
     }
 
-    return ALINK_OK;
+    return ret ? length : ALINK_ERR;
 }
 
 ssize_t esp_info_load(const char *key, void *value, size_t length)
@@ -156,27 +188,31 @@ ssize_t esp_info_load(const char *key, void *value, size_t length)
     ALINK_PARAM_CHECK(!value);
     ALINK_PARAM_CHECK(length <= 0);
 
-    if (length & 0x03 != 0) {
-        length += (4 - length & 0x3);
-    }
+    INFO_MUTEX_LOCK();
 
-    int ret = 0;
+    int ret = ALINK_FALSE;
     int info_index = get_alink_info_index(key);
 
     if (info_index < 0) {
         ALINK_LOGW("The data has been erased");
-        return ALINK_ERR;
+        goto EXIT;
     }
 
-    ALINK_ERROR_CHECK(length < g_info_manager.alink_info[info_index].length, ALINK_ERR,
-                      "The buffer is too small ");
-    ret = spi_flash_read(INFO_STORE_MANAGER_ADDR + g_info_manager.alink_info[info_index].offset,
-                         (uint32_t *)value, length);
+    ALINK_ERROR_GOTO(length < g_info_manager.alink_info[info_index].length, EXIT,
+                     "The buffer is too small, length: %d, flash length: %d",
+                     length, g_info_manager.alink_info[info_index].length);
+
+    ret = system_param_load(INFO_STORE_MANAGER_ADDR / 4096, g_info_manager.alink_info[info_index].offset,
+                            value, g_info_manager.alink_info[info_index].length);
+    ALINK_ERROR_GOTO(ret == ALINK_FALSE, EXIT, "system_param_load");
 
     if (*((uint8_t *)value) == 0xff && *((uint8_t *)value + 1) == 0xff) {
         ALINK_LOGW("The data has been erased");
-        return ALINK_ERR;
+        ret = ALINK_FALSE;
+        goto EXIT;
     }
 
-    return length;
+EXIT:
+    INFO_MUTEX_UNLOCK();
+    return ret ? length : ALINK_ERR;
 }

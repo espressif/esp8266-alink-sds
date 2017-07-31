@@ -49,7 +49,7 @@ static void key_13_long_press(void)
 static void key_sw2_short_press(void)
 {
     ALINK_LOGD("short press..");
-    // alink_event_send(ALINK_EVENT_ACTIVATE_DEVICE);
+    alink_event_send(ALINK_EVENT_HIGH_FREQUENCY_TEST);
 }
 
 static void key_sw2_long_press(void)

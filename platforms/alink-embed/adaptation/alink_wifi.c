@@ -288,13 +288,13 @@ static void event_handler(System_Event_t *event)
             sys_net_is_ready = ALINK_TRUE;
             ALINK_LOGI("SYSTEM_EVENT_STA_GOT_IP");
             xSemaphoreGive(xSemConnet);
-            alink_event_send(ALINK_EVENT_STA_GOT_IP);
+            alink_event_send(ALINK_EVENT_WIFI_CONNECTED);
             break;
 
         case EVENT_STAMODE_DISCONNECTED:
             ALINK_LOGI("SYSTEM_EVENT_STA_DISCONNECTED");
             sys_net_is_ready = ALINK_FALSE;
-            alink_event_send(ALINK_EVENT_STA_DISCONNECTED);
+            alink_event_send(ALINK_EVENT_WIFI_DISCONNECTED);
             ESP_ERROR_CHECK(wifi_station_connect());
             break;
 

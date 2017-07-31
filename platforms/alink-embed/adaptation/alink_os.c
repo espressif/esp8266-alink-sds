@@ -36,9 +36,6 @@
 #include "esp_info_store.h"
 #include "esp_alink_log.h"
 
-#define ALINK_CHIPID              "esp8266"
-#define MODULE_NAME               "ESP-WROOM-02"
-
 #define PLATFORM_TABLE_CONTENT_CNT(table) (sizeof(table)/sizeof(table[0]))
 
 static const char *TAG = "alink_os";
@@ -72,6 +69,7 @@ void platform_free(_IN_ void *ptr)
     }
 
     free(ptr);
+    ptr = NULL;
     // ALINK_LOGV("free: ptr: %p free_heap :%u", ptr, system_get_free_heap_size());
 }
 
@@ -281,7 +279,11 @@ int platform_config_write(_IN_ const char *buffer, _IN_ int length)
 char *platform_get_chipid(_OUT_ char cid_str[PLATFORM_CID_LEN])
 {
     ALINK_PARAM_CHECK(cid_str == NULL);
-    memcpy(cid_str, ALINK_CHIPID, PLATFORM_CID_LEN);
+#ifndef CONFIG_ALINK_CHIP_ID
+    sprintf(cid_str, "%d", system_get_chip_id());
+#else
+    strncpy(cid_str, ALINK_CHIPID, PLATFORM_CID_LEN);
+#endif
     return cid_str;
 }
 
@@ -296,7 +298,7 @@ char *platform_get_os_version(_OUT_ char version_str[STR_SHORT_LEN])
 char *platform_get_module_name(_OUT_ char name_str[STR_SHORT_LEN])
 {
     ALINK_PARAM_CHECK(name_str == NULL);
-    memcpy(name_str, MODULE_NAME, STR_SHORT_LEN);
+    memcpy(name_str, ALINK_MODULE_NAME, STR_SHORT_LEN);
     return name_str;
 }
 

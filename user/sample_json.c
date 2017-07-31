@@ -34,6 +34,7 @@
 #ifndef ALINK_PASSTHROUGH
 
 static const char *TAG = "sample_json";
+static xTaskHandle read_handle = NULL;
 
 /*do your job here*/
 typedef struct virtual_dev {
@@ -43,24 +44,6 @@ typedef struct virtual_dev {
     uint8_t power;
     uint8_t work_mode;
 } dev_info_t;
-
-/**
- * @brief As a unique identifier for the sds device
- */
-#define device_key              "xrSJSzVDKPk4UB7BGCIf"
-#define device_secret           "cRB3lwgd7zwFg02DK69xxl2lgefDdtYZ"
-#define DEVICE_KEY_LEN          (20 + 1)
-#define DEVICE_SECRET_LEN       (32 + 1)
-
-char *product_get_device_key(char key_str[DEVICE_KEY_LEN])
-{
-    return strncpy(key_str, device_key, DEVICE_KEY_LEN);
-}
-
-char *product_get_device_secret(char secret_str[DEVICE_SECRET_LEN])
-{
-    return strncpy(secret_str, device_secret, DEVICE_SECRET_LEN);
-}
 
 /**
  * @brief  In order to simplify the analysis of json package operations,
@@ -117,11 +100,12 @@ static const char *activate_data2 = "{\"ErrorCode\": { \"value\": \"0\" }}";
 static alink_err_t alink_activate_device()
 {
     alink_err_t ret = 0;
-    ret = alink_write(activate_data, strlen(activate_data) + 1, 500);
-    ret = alink_write(activate_data2, strlen(activate_data2) + 1, 500);
+    ret = alink_write(activate_data, strlen(activate_data) + 1, 200);
+    ret = alink_write(activate_data2, strlen(activate_data2) + 1, 200);
 
     if (ret < 0) {
         ALINK_LOGW("alink_write is err");
+        return ALINK_ERR;
     }
 
     return ALINK_OK;
@@ -135,7 +119,7 @@ static alink_err_t proactive_report_data()
 {
     alink_err_t ret = 0;
     char *up_cmd = (char *)calloc(1, ALINK_DATA_LEN);
-    dev_info_t light_info = {
+    const dev_info_t light_info = {
         .errorcode = 0x00,
         .hue       = 0x10,
         .luminance = 0x50,
@@ -152,6 +136,7 @@ static alink_err_t proactive_report_data()
 
     if (ret < 0) {
         ALINK_LOGW("alink_write is err");
+        return ALINK_ERR;
     }
 
     return ALINK_OK;
@@ -190,8 +175,10 @@ static void read_task_test(void *arg)
         if (!strcmp(method_str, "getDeviceStatus")) {
             proactive_report_data();
             continue;
-        } else if (!strcmp(method_str, "setDeviceStatus")) {
-            // ALINK_LOGD("setDeviceStatus: %s", down_cmd);
+        }
+
+        if (!strcmp(method_str, "setDeviceStatus")) {
+            ALINK_LOGV("setDeviceStatus: %s", down_cmd);
             device_data_parse(down_cmd, "ErrorCode", &(light_info.errorcode));
             device_data_parse(down_cmd, "Hue", &(light_info.hue));
             device_data_parse(down_cmd, "Luminance", &(light_info.luminance));
@@ -201,7 +188,11 @@ static void read_task_test(void *arg)
                        light_info.errorcode, light_info.hue, light_info.luminance, light_info.power, light_info.work_mode,
                        system_get_free_heap_size());
 
-            /* write data is not necessary */
+            memset(down_cmd, 0, ALINK_DATA_LEN);
+            device_data_pack(down_cmd, "Hue", light_info.hue);
+            device_data_pack(down_cmd, "Luminance", light_info.luminance);
+            device_data_pack(down_cmd, "Switch", light_info.power);
+            device_data_pack(down_cmd, "WorkMode", light_info.work_mode);
             ret = alink_write(down_cmd, strlen(down_cmd) + 1, 0);
 
             if (ret < 0) {
@@ -240,7 +231,7 @@ static alink_err_t alink_event_handler(alink_event_t event)
             ALINK_LOGD("The device post data success!");
             break;
 
-        case ALINK_EVENT_STA_DISCONNECTED:
+        case ALINK_EVENT_WIFI_DISCONNECTED:
             ALINK_LOGD("Wifi disconnected");
             break;
 
@@ -261,6 +252,18 @@ static alink_err_t alink_event_handler(alink_event_t event)
         case ALINK_EVENT_ACTIVATE_DEVICE:
             ALINK_LOGD("Requests activate device");
             alink_activate_device();
+            break;
+
+        case ALINK_EVENT_HIGH_FREQUENCY_TEST:
+            ALINK_LOGD("enter high-frequency send and receive data test");
+            ALINK_LOGI("*********************************");
+            ALINK_LOGI("*  SET ALINK SDK LOGLEVEL INFO  *");
+            ALINK_LOGI("*********************************");
+            /**
+             * Too much serial print information will not be able to pass high-frequency
+             * send and receive data test
+             */
+            alink_set_loglevel(ALINK_LL_INFO);
             break;
 
         default:
@@ -322,13 +325,27 @@ uint32 user_rf_cal_sector_set(void)
     return rf_cal_sec;
 }
 
-static xTaskHandle read_handle = NULL;
 /**
- * @brief This function is only for detecting memory leaks
+ * @brief As a unique identifier for the sds device
  */
+#define device_key              "xrSJSzVDKPk4UB7BGCIf"
+#define device_secret           "cRB3lwgd7zwFg02DK69xxl2lgefDdtYZ"
+#define DEVICE_KEY_LEN          (20 + 1)
+#define DEVICE_SECRET_LEN       (32 + 1)
+
+char *product_get_device_key(char key_str[DEVICE_KEY_LEN])
+{
+    return strncpy(key_str, device_key, DEVICE_KEY_LEN);
+}
+
+char *product_get_device_secret(char secret_str[DEVICE_SECRET_LEN])
+{
+    return strncpy(secret_str, device_secret, DEVICE_SECRET_LEN);
+}
+
 static void alink_app_main_task(void *arg)
 {
-    alink_product_t product_info = {
+    const alink_product_t product_info = {
         .name           = "alink_product",
         .version        = "1.0.0",
         .model          = "ALINKTEST_LIVING_LIGHT_ALINK_TEST",
@@ -351,6 +368,9 @@ static void alink_app_main_task(void *arg)
 #ifdef SAMPLE_JSON_DEBUG
 extern xTaskHandle event_handle;
 extern xTaskHandle post_handle;
+/**
+ * @brief This function is only for detecting memory leaks
+ */
 static void alink_debug_task(void *arg)
 {
     for (;;) {
@@ -382,7 +402,6 @@ static void alink_debug_task(void *arg)
  * Parameters   : none
  * Returns      : none
 *******************************************************************************/
-
 void user_init(void)
 {
 #ifdef SAMPLE_JSON_DEBUG
@@ -396,9 +415,16 @@ void user_init(void)
     ALINK_LOGI("excvaddr : 0x%x", rst_info->excvaddr);
     ALINK_LOGI("depc     : 0x%x", rst_info->depc);
     ALINK_LOGI("rtn_addr : 0x%x", rst_info->rtn_addr);
-    ALINK_LOGI("free_heap :%u\n", system_get_free_heap_size());
     xTaskCreate(alink_debug_task, "debug_task", 512 / 4 , NULL, 3, NULL);
 #endif
+
+    ALINK_LOGI("================= SYSTEM INFO ================");
+    ALINK_LOGI("compile time : %s %s", __DATE__, __TIME__);
+    ALINK_LOGI("modle name   : %s", CONFIG_ALINK_MODULE_NAME);
+    ALINK_LOGI("chip id      : %d", system_get_chip_id());
+    ALINK_LOGI("sdk  version : %s", system_get_sdk_version());
+    ALINK_LOGI("cup freq     : %dMHz", system_get_cpu_freq());
+    ALINK_LOGI("free heap    : %dB", system_get_free_heap_size());
 
     wifi_set_opmode(STATION_MODE);
     xTaskCreate(alink_app_main_task, "app_main_task", (4096 + 512) / 4 , NULL, 5, NULL);
