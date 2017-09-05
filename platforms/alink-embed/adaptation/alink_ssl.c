@@ -69,7 +69,7 @@ void *platform_ssl_connect(_IN_ void *tcp_fd, _IN_ const char *server_cert, _IN_
     }
 
     ALINK_LOGD("set SSL context read buffer size free_heap: %d", system_get_free_heap_size());
-    SSL_CTX_set_default_read_buffer_len(ctx, 2048);
+    SSL_CTX_set_default_read_buffer_len(ctx, SSL_READ_BUFFER_LEN);
     ssl = SSL_new(ctx);
 
     if (!ssl) {
@@ -149,9 +149,11 @@ int platform_ssl_recv(_IN_ void *ssl, _OUT_ char *buffer, _IN_ int length)
         alink_ssl_mutex = platform_mutex_init();
     }
 
-    platform_mutex_lock(alink_ssl_mutex);
-    ret = SSL_read((SSL *)ssl, buffer, length);
-    platform_mutex_unlock(alink_ssl_mutex);
+    do {
+        platform_mutex_lock(alink_ssl_mutex);
+        ret = SSL_read((SSL *)ssl, buffer, length);
+        platform_mutex_unlock(alink_ssl_mutex);
+    }while(ret >= 2048);
 
     ALINK_ERROR_CHECK(ret <= 0, ALINK_ERR, "SSL_read, ret:%d, errno:%d", ret, errno);
     return ret;

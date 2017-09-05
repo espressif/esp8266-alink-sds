@@ -47,9 +47,10 @@ alink_err_t __esp_json_parse(const char *json_str, const char *key, void *value,
         return -EINVAL;
     }
 
-    // ALINK_ERROR_CHECK(!pSub, -EINVAL, "cJSON_GetObjectItem %s", key);
-
     char *p = NULL;
+    int array_size = 0;
+    char **q = NULL;
+    int i = 0;
 
     switch (value_type) {
         case 1:
@@ -83,7 +84,7 @@ alink_err_t __esp_json_parse(const char *json_str, const char *key, void *value,
                     break;
 
                 case cJSON_Object:
-                    p = cJSON_Print(pSub);
+                    p = cJSON_PrintUnformatted(pSub);
 
                     if (!p) {
                         cJSON_Delete(pJson);
@@ -92,6 +93,40 @@ alink_err_t __esp_json_parse(const char *json_str, const char *key, void *value,
                     ALINK_ERROR_CHECK(!p, -ENOMEM, "cJSON_Print");
                     memcpy(value, p, strlen(p) + 1);
                     free(p);
+                    break;
+
+                case cJSON_Array:
+                    array_size = cJSON_GetArraySize(pSub);
+                    q = (char **)value;
+
+                    for (i = 0; i < array_size; ++i) {
+                        cJSON *item = cJSON_GetArrayItem(pSub, i);
+
+                        if (item->type == cJSON_Number) {
+                            *((int *)value + i) = cJSON_GetArrayItem(pSub, i)->valueint;
+                            continue;
+                        }
+
+                        if (item->type == cJSON_String) {
+                            *q++ = strstr(json_str, item->valuestring);
+                            continue;
+                        }
+
+                        if (item->type == cJSON_Object) {
+                            p = cJSON_PrintUnformatted(item);
+
+                            if (!p) {
+                                cJSON_Delete(pJson);
+                            }
+
+                            ALINK_ERROR_CHECK(!p, -ENOMEM, "cJSON_Print");
+                            *q++ = strstr(json_str, p);
+                            free(p);
+                        }
+                    }
+
+                    cJSON_Delete(pJson);
+                    return array_size;
                     break;
 
                 default:
@@ -160,7 +195,7 @@ ssize_t __esp_json_pack(char *json_str, const char *key, int value, int value_ty
     int tmp = 0;
 
     if (key) {
-        tmp = sprintf(json_str, "\"%s\": ", key);
+        tmp = sprintf(json_str, "\"%s\":", key);
         json_str += tmp;
         ret += tmp;
     }

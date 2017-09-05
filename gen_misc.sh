@@ -16,6 +16,7 @@ spi_size_map=5
 
 rm bin/* -rf
 cd platforms
+# make clean
 make
 cd -
 make clean

@@ -386,8 +386,8 @@ int platform_select(void *read_fds[PLATFORM_SOCKET_MAXNUMS],
                 FD_SET((long)write_fds[i], &w_set);
             }
 
-            if ((int)read_fds[i] > max_fd) {
-                max_fd = (int)read_fds[i];
+            if ((int)write_fds[i] > max_fd) {
+                max_fd = (int)write_fds[i];
             }
         }
     }

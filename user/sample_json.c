@@ -33,6 +33,10 @@
 
 #ifndef ALINK_PASSTHROUGH
 
+#ifndef CONFIG_READ_TASK_STACK
+#define CONFIG_READ_TASK_STACK ((1024+512) / 4)
+#endif
+
 static const char *TAG = "sample_json";
 static xTaskHandle read_handle = NULL;
 
@@ -44,6 +48,14 @@ typedef struct virtual_dev {
     uint8_t power;
     uint8_t work_mode;
 } dev_info_t;
+
+static dev_info_t light_info = {
+    .errorcode = 0x00,
+    .hue       = 0x10,
+    .luminance = 0x50,
+    .power     = 0x01,
+    .work_mode = 0x02,
+};
 
 /**
  * @brief  In order to simplify the analysis of json package operations,
@@ -119,13 +131,7 @@ static alink_err_t proactive_report_data()
 {
     alink_err_t ret = 0;
     char *up_cmd = (char *)calloc(1, ALINK_DATA_LEN);
-    const dev_info_t light_info = {
-        .errorcode = 0x00,
-        .hue       = 0x10,
-        .luminance = 0x50,
-        .power     = 0x01,
-        .work_mode = 0x02,
-    };
+
     // device_data_pack(up_cmd, "ErrorCode", light_info.errorcode);
     device_data_pack(up_cmd, "Hue", light_info.hue);
     device_data_pack(up_cmd, "Luminance", light_info.luminance);
@@ -154,7 +160,6 @@ static void read_task_test(void *arg)
 {
     char *down_cmd = (char *)malloc(ALINK_DATA_LEN);
     alink_err_t ret = ALINK_ERR;
-    dev_info_t light_info;
 
     for (;;) {
         ret = alink_read(down_cmd, ALINK_DATA_LEN, portMAX_DELAY);
@@ -347,10 +352,12 @@ static void alink_app_main_task(void *arg)
 {
     const alink_product_t product_info = {
         .name           = "alink_product",
+        /*!< Product version number, ota upgrade need to be modified */
         .version        = "1.0.0",
         .model          = "ALINKTEST_LIVING_LIGHT_ALINK_TEST",
         .key            = "5gPFl8G4GyFZ1fPWk20m",
         .secret         = "ngthgTlZ65bX5LpViKIWNsDPhOf2As9ChnoL9gQb",
+        /*!< The Key-value pair used in the product */
         .key_sandbox    = "dpZZEpm9eBfqzK7yVeLq",
         .secret_sandbox = "THnfRRsU5vu6g6m9X6uFyAjUWflgZ0iyGjdEneKm",
     };
@@ -361,7 +368,7 @@ static void alink_app_main_task(void *arg)
     alink_key_trigger();
     esp_info_init();
     alink_init(&product_info, alink_event_handler);
-    xTaskCreate(read_task_test, "read_task_test", (1024 + 512) / 4, NULL, 5, &read_handle);
+    xTaskCreate(read_task_test, "read_task_test", CONFIG_READ_TASK_STACK, NULL, 5, &read_handle);
     vTaskDelete(NULL);
 }
 

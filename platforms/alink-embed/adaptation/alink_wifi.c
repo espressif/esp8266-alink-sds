@@ -22,6 +22,11 @@
  *
  */
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+#include "freertos/timers.h"
+
 #include "esp_system.h"
 #include "esp_misc.h"
 #include "esp_wifi.h"
@@ -274,14 +279,30 @@ int platform_sys_net_is_ready(void)
     return sys_net_is_ready;
 }
 
+
+static void wifi_connect_timer_cb(void *timer)
+{
+    if(STATION_GOT_IP != wifi_station_get_connect_status()){
+        ESP_ERROR_CHECK(wifi_station_disconnect());
+    }
+
+    xTimerStop(timer, 0);
+    xTimerDelete(timer, 0);
+}
+
 static xSemaphoreHandle xSemConnet = NULL;
 static void event_handler(System_Event_t *event)
 {
     ALINK_ERROR_CHECK(!event, ; , "event == NULL");
 
+    xTimerHandle timer = NULL;
+
     switch (event->event_id) {
         case EVENT_STAMODE_CONNECTED:
             ALINK_LOGI("EVENT_STAMODE_CONNECTED");
+            timer = xTimerCreate("Timer", (3000 / portTICK_RATE_MS), false, NULL,
+                                 wifi_connect_timer_cb);
+            xTimerStart(timer, 0);
             break;
 
         case EVENT_STAMODE_GOT_IP:

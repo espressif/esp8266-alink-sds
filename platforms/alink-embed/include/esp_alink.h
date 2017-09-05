@@ -72,7 +72,7 @@ typedef int32_t alink_err_t;
 #define CONFIG_WIFI_WAIT_TIME         60
 #endif
 #ifndef CONFIG_ALINK_DATA_LEN
-#define CONFIG_ALINK_DATA_LEN         512
+#define CONFIG_ALINK_DATA_LEN         1536
 #endif
 
 #ifndef CONFIG_ALINK_TASK_PRIOTY
@@ -98,6 +98,12 @@ typedef int32_t alink_err_t;
 #ifndef CONFIG_ALINK_MODULE_NAME
 #define CONFIG_ALINK_MODULE_NAME      "ESP-WROOM-02"
 #endif
+
+#ifndef CONFIG_SSL_READ_BUFFER_LEN
+#define CONFIG_SSL_READ_BUFFER_LEN     3096
+#endif
+
+#define SSL_READ_BUFFER_LEN             CONFIG_SSL_READ_BUFFER_LEN
 
 #define ALINK_MODULE_NAME             CONFIG_ALINK_MODULE_NAME
 
