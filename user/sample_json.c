@@ -26,6 +26,8 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
+
 
 #include "esp_alink.h"
 #include "esp_alink_log.h"
@@ -37,7 +39,7 @@
 #define CONFIG_READ_TASK_STACK ((1024+512) / 4)
 #endif
 
-static const char *TAG = "sample_json";
+static const char *TAG         = "sample_json";
 static xTaskHandle read_handle = NULL;
 
 /*do your job here*/
@@ -63,23 +65,20 @@ static dev_info_t light_info = {
  */
 static alink_err_t device_data_parse(const char *json_str, const char *key, uint8_t *value)
 {
-    alink_err_t ret = 0;
-    char sub_str[64] = {0};
+    alink_err_t ret   = 0;
+    char sub_str[64]  = {0};
     char value_tmp[8] = {0};
 
-    ret = esp_json_parse(json_str, key, sub_str);
-
-    if (ret < 0) {
+    if (esp_json_parse(json_str, key, sub_str) < 0) {
         return ALINK_ERR;
     }
 
-    ret = esp_json_parse(sub_str, "value", value_tmp);
-
-    if (ret < 0) {
+    if (esp_json_parse(sub_str, "value", value_tmp) < 0) {
         return ALINK_ERR;
     }
 
     *value = atoi(value_tmp);
+
     return ALINK_ERR;
 }
 
@@ -88,15 +87,11 @@ static alink_err_t device_data_pack(const char *json_str, const char *key, int v
     char sub_str[64] = {0};
     alink_err_t ret = 0;
 
-    ret = esp_json_pack(sub_str, "value", value);
-
-    if (ret < 0) {
+    if (esp_json_pack(sub_str, "value", value) < 0) {
         return ALINK_ERR;
     }
 
-    ret = esp_json_pack(json_str, key, sub_str);
-
-    if (ret < 0) {
+    if (esp_json_pack(json_str, key, sub_str) < 0) {
         return ALINK_ERR;
     }
 
@@ -112,13 +107,12 @@ static const char *activate_data2 = "{\"ErrorCode\": { \"value\": \"0\" }}";
 static alink_err_t alink_activate_device()
 {
     alink_err_t ret = 0;
-    ret = alink_write(activate_data, strlen(activate_data) + 1, 200);
-    ret = alink_write(activate_data2, strlen(activate_data2) + 1, 200);
 
-    if (ret < 0) {
-        ALINK_LOGW("alink_write is err");
-        return ALINK_ERR;
-    }
+    ret = alink_write(activate_data, strlen(activate_data) + 1, 200);
+    ALINK_ERROR_CHECK(ret < 0, ALINK_ERR, "alink_write, ret: %d", ret);
+
+    ret = alink_write(activate_data2, strlen(activate_data2) + 1, 200);
+    ALINK_ERROR_CHECK(ret < 0, ALINK_ERR, "alink_write, ret: %d", ret);
 
     return ALINK_OK;
 }
@@ -130,20 +124,16 @@ static alink_err_t alink_activate_device()
 static alink_err_t proactive_report_data()
 {
     alink_err_t ret = 0;
-    char *up_cmd = (char *)calloc(1, ALINK_DATA_LEN);
+    char *up_cmd    = calloc(1, ALINK_DATA_LEN);
 
-    // device_data_pack(up_cmd, "ErrorCode", light_info.errorcode);
     device_data_pack(up_cmd, "Hue", light_info.hue);
     device_data_pack(up_cmd, "Luminance", light_info.luminance);
     device_data_pack(up_cmd, "Switch", light_info.power);
     device_data_pack(up_cmd, "WorkMode", light_info.work_mode);
+
     ret = alink_write(up_cmd, strlen(up_cmd) + 1, 500);
     free(up_cmd);
-
-    if (ret < 0) {
-        ALINK_LOGW("alink_write is err");
-        return ALINK_ERR;
-    }
+    ALINK_ERROR_CHECK(ret < 0, ALINK_ERR, "alink_write, ret: %d", ret);
 
     return ALINK_OK;
 }
@@ -158,7 +148,7 @@ static alink_err_t proactive_report_data()
  */
 static void read_task_test(void *arg)
 {
-    char *down_cmd = (char *)malloc(ALINK_DATA_LEN);
+    char *down_cmd  = (char *)malloc(ALINK_DATA_LEN);
     alink_err_t ret = ALINK_ERR;
 
     for (;;) {
@@ -330,36 +320,18 @@ uint32 user_rf_cal_sector_set(void)
     return rf_cal_sec;
 }
 
-/**
- * @brief As a unique identifier for the sds device
- */
-#define device_key              "xrSJSzVDKPk4UB7BGCIf"
-#define device_secret           "cRB3lwgd7zwFg02DK69xxl2lgefDdtYZ"
-#define DEVICE_KEY_LEN          (20 + 1)
-#define DEVICE_SECRET_LEN       (32 + 1)
-
-char *product_get_device_key(char key_str[DEVICE_KEY_LEN])
-{
-    return strncpy(key_str, device_key, DEVICE_KEY_LEN);
-}
-
-char *product_get_device_secret(char secret_str[DEVICE_SECRET_LEN])
-{
-    return strncpy(secret_str, device_secret, DEVICE_SECRET_LEN);
-}
-
 static void alink_app_main_task(void *arg)
 {
+    alink_err_t ret = ALINK_OK;
     const alink_product_t product_info = {
         .name           = "alink_product",
         /*!< Product version number, ota upgrade need to be modified */
         .version        = "1.0.0",
-        .model          = "ALINKTEST_LIVING_LIGHT_ALINK_TEST",
-        .key            = "5gPFl8G4GyFZ1fPWk20m",
-        .secret         = "ngthgTlZ65bX5LpViKIWNsDPhOf2As9ChnoL9gQb",
-        /*!< The Key-value pair used in the product */
-        .key_sandbox    = "dpZZEpm9eBfqzK7yVeLq",
-        .secret_sandbox = "THnfRRsU5vu6g6m9X6uFyAjUWflgZ0iyGjdEneKm",
+        .model          = "OPENALINK_LIVING_LIGHT_SDS_TEST",
+        .key            = "1L6ueddLqnRORAQ2sGOL",
+        .secret         = "qfxCLoc1yXEk9aLdx5F74tl1pdxl0W0q7eYOvvuo",
+        .key_sandbox    = "",
+        .secret_sandbox = "",
     };
 
     /**
@@ -372,36 +344,31 @@ static void alink_app_main_task(void *arg)
     vTaskDelete(NULL);
 }
 
-#ifdef SAMPLE_JSON_DEBUG
+
 extern xTaskHandle event_handle;
 extern xTaskHandle post_handle;
 /**
  * @brief This function is only for detecting memory leaks
  */
-static void alink_debug_task(void *arg)
+static void alink_debug_timer_cb(void *timer)
 {
-    for (;;) {
-        ALINK_LOGI("total free heap :%d, count: %d", system_get_free_heap_size(), count);
+    ALINK_LOGI("total free heap : %dB, count: %d", system_get_free_heap_size(), count);
 
-        if (event_handle) {
-            ALINK_LOGI("event_handle free heap size: %dB", uxTaskGetStackHighWaterMark(event_handle) * 4);
-        }
-
-        if (post_handle) {
-            ALINK_LOGI("post_handle free heap size: %dB", uxTaskGetStackHighWaterMark(post_handle) * 4);
-        }
-
-        if (read_handle) {
-            ALINK_LOGI("read_handle free heap size: %dB", uxTaskGetStackHighWaterMark(read_handle) * 4);
-        }
-
-        printf("\n");
-        vTaskDelay(5000 / portTICK_RATE_MS);
+    if (event_handle) {
+        ALINK_LOGI("event_handle free heap size: %dB", uxTaskGetStackHighWaterMark(event_handle) * 4);
     }
 
-    vTaskDelete(NULL);
+    if (post_handle) {
+        ALINK_LOGI("post_handle free heap size: %dB", uxTaskGetStackHighWaterMark(post_handle) * 4);
+    }
+
+    if (read_handle) {
+        ALINK_LOGI("read_handle free heap size: %dB", uxTaskGetStackHighWaterMark(read_handle) * 4);
+    }
+
+    printf("\n");
 }
-#endif
+
 
 /******************************************************************************
  * FunctionName : user_init
@@ -411,8 +378,8 @@ static void alink_debug_task(void *arg)
 *******************************************************************************/
 void user_init(void)
 {
-#ifdef SAMPLE_JSON_DEBUG
     /*!< Used to debug unexpectedly exit */
+    ALINK_LOGI("=================  EXIT INFO  ================");
     struct rst_info *rst_info = system_get_rst_info();
     ALINK_LOGI("reason   : 0x%x", rst_info->reason);
     ALINK_LOGI("exccause : 0x%x", rst_info->exccause);
@@ -422,8 +389,6 @@ void user_init(void)
     ALINK_LOGI("excvaddr : 0x%x", rst_info->excvaddr);
     ALINK_LOGI("depc     : 0x%x", rst_info->depc);
     ALINK_LOGI("rtn_addr : 0x%x", rst_info->rtn_addr);
-    xTaskCreate(alink_debug_task, "debug_task", 512 / 4 , NULL, 3, NULL);
-#endif
 
     ALINK_LOGI("================= SYSTEM INFO ================");
     ALINK_LOGI("compile time : %s %s", __DATE__, __TIME__);
@@ -435,5 +400,10 @@ void user_init(void)
 
     wifi_set_opmode(STATION_MODE);
     xTaskCreate(alink_app_main_task, "app_main_task", (4096 + 512) / 4 , NULL, 5, NULL);
+
+    xTimerHandle timer = xTimerCreate("alink_debug_timer_cb", 10000 / portTICK_RATE_MS,
+                                       true, NULL, alink_debug_timer_cb);
+    xTimerStart(timer, 0);
 }
-#endif
+
+#endif /*!< ALINK_PASSTHROUGH */

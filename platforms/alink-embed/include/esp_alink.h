@@ -103,7 +103,11 @@ typedef int32_t alink_err_t;
 #define CONFIG_SSL_READ_BUFFER_LEN     3096
 #endif
 
-#define SSL_READ_BUFFER_LEN             CONFIG_SSL_READ_BUFFER_LEN
+#ifndef CONFIG_DEVICE_ID_ADRR
+#define CONFIG_DEVICE_ID_ADRR          0x1F7000
+#endif
+
+#define SSL_READ_BUFFER_LEN           CONFIG_SSL_READ_BUFFER_LEN
 
 #define ALINK_MODULE_NAME             CONFIG_ALINK_MODULE_NAME
 
@@ -115,6 +119,8 @@ typedef int32_t alink_err_t;
 
 #define DOWN_CMD_QUEUE_NUM            CONFIG_DOWN_CMD_QUEUE_NUM
 #define UP_CMD_QUEUE_NUM              CONFIG_UP_CMD_QUEUE_NUM
+
+#define DEVICE_ID_ADRR                CONFIG_DEVICE_ID_ADRR
 
 #ifdef CONFIG_ALINK_PASSTHROUGH
 #define ALINK_PASSTHROUGH

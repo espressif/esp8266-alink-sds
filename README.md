@@ -23,7 +23,7 @@
 ### 2.1 知识储备
 - 了解 ALINK
 请详细阅读阿里提供的官方[技术文档](https://open.aliplus.com/docs/open/)，了解 ALINK 相关的概念
-- 熟悉 ESP32 开发
+- 熟悉 ESP8266 开发
 请详细阅读 [ESP8266入门指南](http://espressif.com/zh-hans/support/explore/get-started/esp8266/getting-started-guide)
 
 ### 2.2 硬件准备
@@ -112,10 +112,11 @@ CCFLAGS += -D CONFIG_SSL_READ_BUFFER_LEN=2048
 
         boot.bin------------------->0x000000    // 启动程序
         user1.2048.new.5.bin------->0x01000     // 主程序
+        device_id.bin-------------->0x1F7000    // 设备ID
         blank_12k.bin-------------->0x1F8000    // 初始化用户参数区
         blank.bin------------------>0x1FB000    // 初始化 RF_CAL 参数区。
         esp_init_data_default.bin-->0x1FC000    // 初始化其他射频参数区
-        blalk.bin------------------>0x1FE000    // 初始化系统参数区
+        blank.bin------------------>0x1FE000    // 初始化系统参数区
 
     > 注：ESP-LAUNCHER 上的 J82 跳针需要用跳线帽短接，否则无法下载
 4. 启动设备
@@ -124,13 +125,10 @@ CCFLAGS += -D CONFIG_SSL_READ_BUFFER_LEN=2048
     <img src="docs/readme_image/running.png" width="400" />
 
 ## 9 运行与调试
-1. 下载阿里[智能厂测包](https://open.aliplus.com/download)
+1. 下载阿里[独立开发者-DemoApp](https://open.alink.aliyun.com/download/)
 2. 登陆淘宝账号
-3. 开启配网模组测试列表：
-    - 安卓：点击“环境切换”，勾选“开启配网模组测试列表”
-    - 苹果：点击“AKDebug”->测试选项，勾选“仅显示模组认证入口”
-4. 添加设备：添加设备->“分类查找”中查找对应的类别->模组认证->V3 配网_热点配网
-5. 按键说明：
+3. 设备配网
+4. 按键说明：
     - 激活设备：短按（<3s）配网开关
     - 重新配网：长按（>=3s）配网开关
     - 高频压测：短按（<3s）设置开关
@@ -141,7 +139,17 @@ CCFLAGS += -D CONFIG_SSL_READ_BUFFER_LEN=2048
 使用淘宝账号签约入驻阿里平台，并完成账号授权
 ### 10.2 [产品注册](https://open.aliplus.com/docs/open/open/register/index.html)
 产品注册是设备上云的必要过程，任何一款产品在上云之前必须完成在平台的注册
-### 10.3 [产品开发](https://open.aliplus.com/docs/open/open/develop/index.html)
+### 10.3 申请设备ID
+1. 购买设备ID：使用 ALINK SDS 的每一个设备都需要一个唯一的设备ID，设备ID需要向阿里官方购买。
+2. 烧录设备ID：设备ID需要在产品生产时烧录到设备的eFuse中，为方便您的修改，在产品开发时，您可以先设备的ID直接烧录 FLASH 中，我们为您提供了生成设备ID固件脚本，请按照如下说明操作：
+    - 填写设备ID列表：打开`device_id_secret.txt`，填入设备的ID
+    ```
+    num       device_id                   device_secret
+    0    3XezoNYjjnkJyslLEEGm    kfU2rROY5s8ffg0kNVotykZNdfn7ZD5X
+    ```
+    - 烧录设备ID固件：运行`gen_misc.sh`脚本，将会在`device_id`文件夹下生成设备ID的固件，您可以选烧录工具上的'DeviceMasterKey Folder Path'，进行批量设备的烧录，烧录后的固件将自动从文件夹中移到"device_id/used"。
+
+### 10.4 [产品开发](https://open.aliplus.com/docs/open/open/develop/index.html)
 > 注：1. 除非您有特殊需求，否则您在开发时只需修改 user 下的代码，无需关心其内部实现细节
 > 　　2. 您需要先开发手机APP，alink embed 版本需要单独的开发的APP，除demo外使用阿里小智将无法进行设备的配网，控制等操作
 
@@ -149,19 +157,16 @@ CCFLAGS += -D CONFIG_SSL_READ_BUFFER_LEN=2048
 
     阿里服务器后台导出设备 TRD 表格,调用`alink_init()`传入产品注册的信息，注册事件回调函数
     ```c
-    /*!< 每一个具体设备都是不一样的，保证设备的秘密性 */
-    #define device_key    "xrSJSzVDKPk4UB7BGCIf"
-    #define device_secret "cRB3lwgd7zwFg02DK69xxl2lgefDdtYZ"
+    const alink_product_t product_info = {
     const alink_product_t product_info = {
         .name           = "alink_product",
+        /*!< Product version number, ota upgrade need to be modified */
         .version        = "1.0.0",
-        .model          = "ALINKTEST_LIVING_LIGHT_ALINK_TEST",
-        /*!< 每一种产品键值对都是相同的 */
-        .key            = "5gPFl8G4GyFZ1fPWk20m",
-        .secret         = "ngthgTlZ65bX5LpViKIWNsDPhOf2As9ChnoL9gQb",
-        /*!< 在沙箱环境下使用的键值对 */
-        .key_sandbox    = "dpZZEpm9eBfqzK7yVeLq",
-        .secret_sandbox = "THnfRRsU5vu6g6m9X6uFyAjUWflgZ0iyGjdEneKm",
+        .model          = "OPENALINK_LIVING_LIGHT_SDS_TEST",
+        .key            = "1L6ueddLqnRORAQ2sGOL",
+        .secret         = "qfxCLoc1yXEk9aLdx5F74tl1pdxl0W0q7eYOvvuo",
+        .key_sandbox    = "",
+        .secret_sandbox = "",
     };
     ESP_ERROR_CHECK( alink_init(&product_info, alink_event_handler) );
     ```
@@ -171,13 +176,13 @@ CCFLAGS += -D CONFIG_SSL_READ_BUFFER_LEN=2048
         - 设备配网过程中的所有动作，都会传入事件回调函数中，您可以根据实际需求事件回调函数相应的做相应处理，如在当设备进入配置配网模式灯慢闪，等待激活时灯快闪等
         ```c
         typedef enum {
-            ALINK_EVENT_CLOUD_CONNECTED = 0,/*!< ESP32 connected from alink cloude */
-            ALINK_EVENT_CLOUD_DISCONNECTED, /*!< ESP32 disconnected from alink cloude */
+            ALINK_EVENT_CLOUD_CONNECTED = 0,/*!< ESP8266 connected from alink cloude */
+            ALINK_EVENT_CLOUD_DISCONNECTED, /*!< ESP8266 disconnected from alink cloude */
             ALINK_EVENT_GET_DEVICE_DATA,    /*!< Alink cloud requests data from the device */
             ALINK_EVENT_SET_DEVICE_DATA,    /*!< Alink cloud to send data to the device */
             ALINK_EVENT_POST_CLOUD_DATA,    /*!< The device sends data to alink cloud  */
-            ALINK_EVENT_WIFI_CONNECTED,     /*!< ESP32 station got IP from connected AP */
-            ALINK_EVENT_WIFI_DISCONNECTED,  /*!< ESP32 station disconnected from AP */
+            ALINK_EVENT_WIFI_CONNECTED,     /*!< ESP8266 station got IP from connected AP */
+            ALINK_EVENT_WIFI_DISCONNECTED,  /*!< ESP8266 station disconnected from AP */
             ALINK_EVENT_CONFIG_NETWORK,     /*!< The equipment enters the distribution mode */
             ALINK_EVENT_UPDATE_ROUTER,      /*!< Request to configure the router */
             ALINK_EVENT_FACTORY_RESET,      /*!< Request to restore factory settings */

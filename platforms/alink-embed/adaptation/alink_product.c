@@ -88,3 +88,21 @@ char *product_get_sn(char sn_str[PRODUCT_SN_LEN])
     snprintf(sn_str, PRODUCT_SN_LEN, "%02x%02x%02x%02x%02x%02x", MAC2STR(mac));
     return sn_str;
 }
+
+char *product_get_device_key(char device_key[DEVICE_KEY_LEN])
+{
+    uint32_t tmp_key[DEVICE_KEY_LEN / 4 + 1] = {0};
+    spi_flash_read(DEVICE_ID_ADRR, tmp_key, DEVICE_KEY_LEN - 1);
+
+    ALINK_LOGD("device_key: %s", tmp_key);
+    return strncpy(device_key, (char *)tmp_key, DEVICE_KEY_LEN);
+}
+
+char *product_get_device_secret(char secret_str[DEVICE_SECRET_LEN])
+{
+    uint32_t tmp_secret[DEVICE_SECRET_LEN / 4 + 1] = {0};
+    spi_flash_read(DEVICE_ID_ADRR + DEVICE_KEY_LEN - 1, tmp_secret, DEVICE_SECRET_LEN - 1);
+
+    ALINK_LOGD("device_key: %s", tmp_secret);
+    return strncpy(secret_str, (char *)tmp_secret, DEVICE_SECRET_LEN);
+}
